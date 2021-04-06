@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+
+<head>
+  <link href='style.css' rel='stylesheet'>
+  <meta name='viewport' content='width=device-width, initial-scale=1.0,maximum-scale=1.0'>
+  <title>Unfiltr</title>
+</head>
+
+<body class='u-sans u-border-sizing u-no-margin'>
+  <div class='u-single-column app'>
+    <span id='title' class='u-single-column u-block u-italic u-align-center u-mb-med'>
+      "It’s not knowledge that you are being observed at all times,
+      <br />it is knowledge that you can be observed at any time that enforces absolute compliance."</span>
+    <div id='messages' class='u-single-column messages'></div>
+    <div id='activeUsers' class='active-users u-position-fixed'></div>
+    <div class='u-sticky-bottom u-bg-white'>
+      <div class='u-single-column u-clearfix panel-input'>
+        <textarea id='textInput' class='u-inline-block input-message'></textarea>
+        <button id='send' class='u-inline-block input-send u-valign-top u-bg-white'>Send</button>
+      </div>
+    </div>
+  </div>
+  <script src='https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.0.3/socket.io.slim.js'></script>
+  <script src='messenger.js'></script>
+</body>
+
+</html>
