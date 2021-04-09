@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common'
+import stats from './stats'
 
 @Injectable()
 export class AppService {
-  getHello(): string {
-    return 'Hello World!';
+  getStats(): string {
+    return `${stats.getMessageCount()} messages exchanged since ${stats.getLastRestart()}`
   }
 }

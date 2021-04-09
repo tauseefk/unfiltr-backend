@@ -3,7 +3,7 @@
 import uuid from 'uuid/v1'
 import Stream from 'observable-stream'
 import { delay, keyIs, getRandomColor, promisifiedRAF, takeContinuousN } from './utils'
-import events from '../events'
+import { events } from '../events'
 
 const port = window.location.port ? ':' + window.location.port : ''
 const host = `${window.location.hostname}${port}`

@@ -1,4 +1,4 @@
-module.exports = {
+export const events = {
   CONNECTION: 'connection',
   DISCONNECT: 'disconnect',
   INFO: 'info',

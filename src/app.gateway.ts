@@ -8,6 +8,7 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets'
 import { Socket, Server } from 'socket.io'
+import { events } from '../events'
 
 @WebSocketGateway()
 export class AppGateway
