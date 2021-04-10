@@ -2,6 +2,9 @@
 /dist
 /node_modules
 
+#Parcel cache
+/.cache
+
 # Logs
 logs
 *.log

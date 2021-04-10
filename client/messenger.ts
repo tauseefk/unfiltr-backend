@@ -1,14 +1,21 @@
 'use strict'
 
-import uuid from 'uuid/v1'
+import { v1 } from 'uuid'
 import Stream from 'observable-stream'
-import { delay, keyIs, getRandomColor, promisifiedRAF, takeContinuousN } from './utils'
-import events from '../events'
+import {
+  delay,
+  keyIs,
+  getRandomColor,
+  promisifiedRAF,
+  takeContinuousN,
+  noOp,
+} from './utils'
+import { events } from '../events'
 
 const port = window.location.port ? ':' + window.location.port : ''
 const host = `${window.location.hostname}${port}`
 const socket = io.connect(host)
-let messagesEl = null
+let messagesEl: HTMLElement = null
 let textInputEl = null
 let sendButtonEl = null
 let userId = null
@@ -16,7 +23,7 @@ let titleEl = null
 let activeUsersEl = null
 const activeUsers = new Map()
 
-const keyIsEnter = keyIs('enter')
+const keyIsEnter = keyIs('Enter')
 
 const delayShort = delay(1000)
 const delayTiny = delay(250)
@@ -30,18 +37,30 @@ socket.on(events.INFO, ({ id, connectedUsers }) => {
     })
 })
 
-const $connections = new Stream((observer) => {
+type Connection = { userId: string }
+const $userConnection = new Stream<Connection>((observer) => {
   socket.on(events.USER_CONNECTED, observer.next)
+  socket.on(events.USER_CONNECTED, observer.complete)
+})
+
+const $userDisconnection = new Stream<Connection>((observer) => {
+  socket.on(events.USER_DISCONNETED, observer.next)
   socket.on(events.USER_DISCONNETED, observer.complete)
 })
 
-const $messages = new Stream((observer) => {
+type Message = { id: string; message: string; from: string }
+const $messages = new Stream<Message>((observer) => {
   socket.on(events.NEW_MESSAGE, observer.next)
   socket.on(events.DISCONNECT, observer.complete)
 })
 
-const $userTyping = new Stream((observer) => {
+const $userTypingStart = new Stream((observer) => {
   socket.on(events.TYPING, observer.next)
+  socket.on(events.TYPING, observer.complete)
+})
+
+const $userTypingStop = new Stream((observer) => {
+  socket.on(events.STOPPED_TYPING, observer.next)
   socket.on(events.STOPPED_TYPING, observer.complete)
 })
 
@@ -49,7 +68,8 @@ const $messageId = new Stream((observer) => {
   socket.on(events.MESSAGE_ID, observer.next)
 })
 
-const $emphasizeMessage = new Stream((observer) => {
+type EmphasizeMessage = { id: string }
+const $emphasizeMessage = new Stream<EmphasizeMessage>((observer) => {
   socket.on(events.EMPHASIZE_MESSAGE, observer.next)
 })
 
@@ -59,8 +79,9 @@ const $emphasizeMessage = new Stream((observer) => {
  * @param {object} { message, id }
  * @param {boolean} isOwn
  */
-const addMessageToChat = ({ message, id }, isOwn) => {
+const addMessageToChat = ({ message, id, from }: Message) => {
   if (!message) return
+  const isOwn = userId === from
 
   const mEl = document.createElement('div')
   mEl.textContent = message
@@ -146,9 +167,15 @@ document.addEventListener('DOMContentLoaded', () => {
   messagesEl = document.getElementById('messages')
   textInputEl = document.getElementById('textInput')
 
-  const $textInput = Stream.fromEvent('keydown', textInputEl)
+  const $textInput = Stream.fromEvent(
+    'keydown',
+    textInputEl,
+  ) as Stream<KeyboardEvent>
   const $sendButtonClick = Stream.fromEvent('click', sendButtonEl)
-  const $messageClick = Stream.fromEvent('click', messagesEl)
+  const $messageClick = Stream.fromEvent(
+    'click',
+    messagesEl,
+  ) as Stream<MouseEvent>
 
   promisifiedRAF()
     .then(() => titleEl.classList.add('u-fade'))
@@ -158,71 +185,94 @@ document.addEventListener('DOMContentLoaded', () => {
   textInputEl.focus()
   textInputEl.select()
 
-  $connections.subscribe({
+  $userConnection.subscribe({
     next: addToActiveUsers,
-    complete: removeFromActiveUsers,
+    complete: noOp,
+  })
+
+  $userDisconnection.subscribe({
+    next: removeFromActiveUsers,
+    complete: noOp,
   })
 
   $textInput
-    .filter((e) => keyIsEnter(e.keyCode))
-    .map((e) => ({ message: e.target.value.trim(), e, textEl: e.target, id: uuid() }))
+    .filter((e) => keyIsEnter(e.code))
+    .map((e) => {
+      const target = e.target as HTMLTextAreaElement
+      return {
+        message: target.value.trim(),
+        e,
+        textEl: target,
+        id: v1(),
+      }
+    })
     .subscribe({
       next: ({ message, id, textEl, e }) => {
         e.preventDefault()
         emitNewMessage({ message, textEl, id })
-        addMessageToChat({ message, id }, true)
+        addMessageToChat({ message, id, from: userId })
       },
+      complete: noOp,
     })
 
   $textInput
-    .filter((e) => !keyIsEnter(e.keyCode))
+    .filter((e) => !keyIsEnter(e.code))
     .subscribe({
       next: emitTyping,
-      complete: () => {},
+      complete: noOp,
     })
 
   $sendButtonClick
     .map(() => ({ message: textInputEl.value.trim(), textEl: textInputEl }))
     .subscribe({
       next: ({ message, textEl }) => {
-        const id = uuid()
+        const id = v1()
         emitNewMessage({ message, id, textEl })
-        addMessageToChat({ message, id }, true)
+        addMessageToChat({ message, id, from: userId })
       },
-      complete: () => {},
+      complete: noOp,
     })
 
   $messages
     .filter(({ from }) => from !== userId)
     .subscribe({
       next: addMessageToChat,
-      complete: () => {},
+      complete: noOp,
     })
 
-  $messageId.subscribe({ next: updateMessageId })
+  $messageId.subscribe({ next: updateMessageId, complete: noOp })
 
   $messageClick
-    .filter(
-      (e) =>
-        e.target &&
-        e.target.classList.contains('j-message') &&
-        e.target.classList.contains('owner-self')
-    )
+    .filter((e) => {
+      const target = e.target as HTMLDivElement
+      return (
+        target &&
+        target.classList.contains('j-message') &&
+        target.classList.contains('owner-self')
+      )
+    })
     .filter(takeContinuousN(5))
-    .map((e) => ({ target: e.target, id: e.target.id }))
+    .map((e) => {
+      const target = e.target as HTMLDivElement
+      return { target, id: target.id }
+    })
     .subscribe({
       next: emphasizeOwnMessage,
-      complete: () => {},
+      complete: noOp,
     })
 
   $emphasizeMessage.subscribe({
-    next: ({ id }) => {
-      emphasizeMessage({ id })
-    },
+    next: emphasizeMessage,
+    complete: noOp,
   })
 
-  $userTyping.subscribe({
+  $userTypingStart.subscribe({
     next: startTyping,
-    complete: stopTyping,
+    complete: noOp,
+  })
+
+  $userTypingStop.subscribe({
+    next: stopTyping,
+    complete: noOp,
   })
 })
