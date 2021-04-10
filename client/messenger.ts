@@ -2,13 +2,20 @@
 
 import uuid from 'uuid/v1'
 import Stream from 'observable-stream'
-import { delay, keyIs, getRandomColor, promisifiedRAF, takeContinuousN } from './utils'
+import {
+  delay,
+  keyIs,
+  getRandomColor,
+  promisifiedRAF,
+  takeContinuousN,
+  noOp,
+} from './utils'
 import { events } from '../events'
 
 const port = window.location.port ? ':' + window.location.port : ''
 const host = `${window.location.hostname}${port}`
 const socket = io.connect(host)
-let messagesEl = null
+let messagesEl: HTMLElement = null
 let textInputEl = null
 let sendButtonEl = null
 let userId = null
@@ -30,12 +37,14 @@ socket.on(events.INFO, ({ id, connectedUsers }) => {
     })
 })
 
-const $connections = new Stream((observer) => {
+type Connection = { userId: string }
+const $connections = new Stream<Connection>((observer) => {
   socket.on(events.USER_CONNECTED, observer.next)
   socket.on(events.USER_DISCONNETED, observer.complete)
 })
 
-const $messages = new Stream((observer) => {
+type Message = { id: string; message: string; from: string }
+const $messages = new Stream<Message>((observer) => {
   socket.on(events.NEW_MESSAGE, observer.next)
   socket.on(events.DISCONNECT, observer.complete)
 })
@@ -49,7 +58,8 @@ const $messageId = new Stream((observer) => {
   socket.on(events.MESSAGE_ID, observer.next)
 })
 
-const $emphasizeMessage = new Stream((observer) => {
+type EmphasizeMessage = { id: string }
+const $emphasizeMessage = new Stream<EmphasizeMessage>((observer) => {
   socket.on(events.EMPHASIZE_MESSAGE, observer.next)
 })
 
@@ -59,8 +69,9 @@ const $emphasizeMessage = new Stream((observer) => {
  * @param {object} { message, id }
  * @param {boolean} isOwn
  */
-const addMessageToChat = ({ message, id }, isOwn) => {
+const addMessageToChat = ({ message, id, from }: Message) => {
   if (!message) return
+  const isOwn = userId === from
 
   const mEl = document.createElement('div')
   mEl.textContent = message
@@ -146,9 +157,15 @@ document.addEventListener('DOMContentLoaded', () => {
   messagesEl = document.getElementById('messages')
   textInputEl = document.getElementById('textInput')
 
-  const $textInput = Stream.fromEvent('keydown', textInputEl)
+  const $textInput = Stream.fromEvent(
+    'keydown',
+    textInputEl,
+  ) as Stream<KeyboardEvent>
   const $sendButtonClick = Stream.fromEvent('click', sendButtonEl)
-  const $messageClick = Stream.fromEvent('click', messagesEl)
+  const $messageClick = Stream.fromEvent(
+    'click',
+    messagesEl,
+  ) as Stream<MouseEvent>
 
   promisifiedRAF()
     .then(() => titleEl.classList.add('u-fade'))
@@ -164,21 +181,30 @@ document.addEventListener('DOMContentLoaded', () => {
   })
 
   $textInput
-    .filter((e) => keyIsEnter(e.keyCode))
-    .map((e) => ({ message: e.target.value.trim(), e, textEl: e.target, id: uuid() }))
+    .filter((e) => keyIsEnter(e.code))
+    .map((e) => {
+      const target = e.target as HTMLTextAreaElement
+      return {
+        message: target.value.trim(),
+        e,
+        textEl: target,
+        id: uuid(),
+      }
+    })
     .subscribe({
       next: ({ message, id, textEl, e }) => {
         e.preventDefault()
         emitNewMessage({ message, textEl, id })
-        addMessageToChat({ message, id }, true)
+        addMessageToChat({ message, id, from: userId })
       },
+      complete: noOp,
     })
 
   $textInput
-    .filter((e) => !keyIsEnter(e.keyCode))
+    .filter((e) => !keyIsEnter(e.code))
     .subscribe({
       next: emitTyping,
-      complete: () => {},
+      complete: noOp,
     })
 
   $sendButtonClick
@@ -187,38 +213,42 @@ document.addEventListener('DOMContentLoaded', () => {
       next: ({ message, textEl }) => {
         const id = uuid()
         emitNewMessage({ message, id, textEl })
-        addMessageToChat({ message, id }, true)
+        addMessageToChat({ message, id, from: userId })
       },
-      complete: () => {},
+      complete: noOp,
     })
 
   $messages
     .filter(({ from }) => from !== userId)
     .subscribe({
       next: addMessageToChat,
-      complete: () => {},
+      complete: noOp,
     })
 
-  $messageId.subscribe({ next: updateMessageId })
+  $messageId.subscribe({ next: updateMessageId, complete: noOp })
 
   $messageClick
-    .filter(
-      (e) =>
-        e.target &&
-        e.target.classList.contains('j-message') &&
-        e.target.classList.contains('owner-self')
-    )
+    .filter((e) => {
+      const target = e.target as HTMLDivElement
+      return (
+        target &&
+        target.classList.contains('j-message') &&
+        target.classList.contains('owner-self')
+      )
+    })
     .filter(takeContinuousN(5))
-    .map((e) => ({ target: e.target, id: e.target.id }))
+    .map((e) => {
+      const target = e.target as HTMLDivElement
+      return { target, id: target.id }
+    })
     .subscribe({
       next: emphasizeOwnMessage,
-      complete: () => {},
+      complete: noOp,
     })
 
   $emphasizeMessage.subscribe({
-    next: ({ id }) => {
-      emphasizeMessage({ id })
-    },
+    next: emphasizeMessage,
+    complete: noOp,
   })
 
   $userTyping.subscribe({
