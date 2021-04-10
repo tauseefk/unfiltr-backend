@@ -1,6 +1,6 @@
 'use strict'
 
-import uuid from 'uuid/v1'
+import { v1 } from 'uuid'
 import Stream from 'observable-stream'
 import {
   delay,
@@ -23,7 +23,7 @@ let titleEl = null
 let activeUsersEl = null
 const activeUsers = new Map()
 
-const keyIsEnter = keyIs('enter')
+const keyIsEnter = keyIs('Enter')
 
 const delayShort = delay(1000)
 const delayTiny = delay(250)
@@ -38,8 +38,13 @@ socket.on(events.INFO, ({ id, connectedUsers }) => {
 })
 
 type Connection = { userId: string }
-const $connections = new Stream<Connection>((observer) => {
+const $userConnection = new Stream<Connection>((observer) => {
   socket.on(events.USER_CONNECTED, observer.next)
+  socket.on(events.USER_CONNECTED, observer.complete)
+})
+
+const $userDisconnection = new Stream<Connection>((observer) => {
+  socket.on(events.USER_DISCONNETED, observer.next)
   socket.on(events.USER_DISCONNETED, observer.complete)
 })
 
@@ -49,8 +54,13 @@ const $messages = new Stream<Message>((observer) => {
   socket.on(events.DISCONNECT, observer.complete)
 })
 
-const $userTyping = new Stream((observer) => {
+const $userTypingStart = new Stream((observer) => {
   socket.on(events.TYPING, observer.next)
+  socket.on(events.TYPING, observer.complete)
+})
+
+const $userTypingStop = new Stream((observer) => {
+  socket.on(events.STOPPED_TYPING, observer.next)
   socket.on(events.STOPPED_TYPING, observer.complete)
 })
 
@@ -175,9 +185,14 @@ document.addEventListener('DOMContentLoaded', () => {
   textInputEl.focus()
   textInputEl.select()
 
-  $connections.subscribe({
+  $userConnection.subscribe({
     next: addToActiveUsers,
-    complete: removeFromActiveUsers,
+    complete: noOp,
+  })
+
+  $userDisconnection.subscribe({
+    next: removeFromActiveUsers,
+    complete: noOp,
   })
 
   $textInput
@@ -188,7 +203,7 @@ document.addEventListener('DOMContentLoaded', () => {
         message: target.value.trim(),
         e,
         textEl: target,
-        id: uuid(),
+        id: v1(),
       }
     })
     .subscribe({
@@ -211,7 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
     .map(() => ({ message: textInputEl.value.trim(), textEl: textInputEl }))
     .subscribe({
       next: ({ message, textEl }) => {
-        const id = uuid()
+        const id = v1()
         emitNewMessage({ message, id, textEl })
         addMessageToChat({ message, id, from: userId })
       },
@@ -251,8 +266,13 @@ document.addEventListener('DOMContentLoaded', () => {
     complete: noOp,
   })
 
-  $userTyping.subscribe({
+  $userTypingStart.subscribe({
     next: startTyping,
-    complete: stopTyping,
+    complete: noOp,
+  })
+
+  $userTypingStop.subscribe({
+    next: stopTyping,
+    complete: noOp,
   })
 })

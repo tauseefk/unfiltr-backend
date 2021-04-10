@@ -1,7 +1,5 @@
 'use strict'
 
-import keyCodes from './keycodes'
-
 const promisifiedRAF = (): Promise<number> => new Promise(requestAnimationFrame)
 
 const delay = (ms: number) => (res: any): Promise<any> =>
@@ -25,8 +23,7 @@ const branchInto = (a: Function, b: Function): Function => (
 ): Function => (_: any) =>
   condition ? Promise.resolve(a(_)) : Promise.resolve(b(_))
 
-const keyIs = (key: string): Function => (keyCode: number): boolean =>
-  keyCodes[keyCode] === key
+const keyIs = (key: string): Function => (code: string): boolean => code === key
 
 const takeContinuousN = (n: number, ms: number = 300) => {
   let _count: number = 0
